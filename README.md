@@ -3,7 +3,7 @@
 An AI-powered career recommendation platform that predicts suitable job roles and career paths based on user education, academic performance, and technical skills.
 
 ---
-##Live Demo
+## Live Demo
 
 
 https://github.com/user-attachments/assets/b62605c9-e3de-4630-8412-d9ed3c461f32
