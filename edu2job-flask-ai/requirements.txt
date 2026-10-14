@@ -1,0 +1,11 @@
+# EDU2JOB 2.0 Flask ML service — pinned runtime dependencies.
+# IMPORTANT: joblib/scikit-learn artifacts are version-sensitive. The NEW
+# model's artifacts must be loaded with the same scikit-learn version that
+# created them; the version below matches the training environment reported
+# for the artifacts. Do not upgrade blindly — confirm against the training
+# notebook/environment and update model_metadata.json accordingly.
+Flask==3.0.3
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.6.1
+joblib==1.4.2

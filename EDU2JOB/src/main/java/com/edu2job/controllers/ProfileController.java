@@ -1,108 +1,60 @@
 package com.edu2job.controllers;
+
+import com.edu2job.dto.ProfileResponse;
+import com.edu2job.dto.ProfileUpdateRequest;
 import com.edu2job.models.User;
-import com.edu2job.models.UserPredictionHistory;
-import com.edu2job.repositories.UserPredictionHistoryRepository;
-import com.edu2job.repositories.UserRepository;
-import com.edu2job.security.JwtUtil;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.edu2job.security.AuthUserResolver;
+import com.edu2job.service.ProfileService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import java.util.Arrays;
-import java.util.HashMap;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import java.util.Map;
 import java.util.Optional;
+
+/**
+ * Profile endpoints (routes unchanged from the previous version):
+ * {@code POST /api/profile/update} and {@code GET /api/profile/latest}.
+ * Both are scoped to the JWT-authenticated user.
+ */
 @RestController
 @RequestMapping("/api/profile")
 public class ProfileController {
 
-    @Autowired
-    private UserPredictionHistoryRepository profileRepo;
+    private final ProfileService profileService;
+    private final AuthUserResolver authUserResolver;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    private User getAuthenticatedUser(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authHeader.substring(7);
-        String username = jwtUtil.extractUsername(token);
-        return userRepository.findByUsername(username).orElse(null);
+    public ProfileController(ProfileService profileService, AuthUserResolver authUserResolver) {
+        this.profileService = profileService;
+        this.authUserResolver = authUserResolver;
     }
 
     @PostMapping("/update")
-    public ResponseEntity<?> updateProfile(@RequestHeader("Authorization") String authHeader, @RequestBody Map<String, Object> data) {
-        User user = getAuthenticatedUser(authHeader);
-        if (user == null) {
-            return ResponseEntity.status(401).body("Unauthorized");
+    public ResponseEntity<?> updateProfile(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody ProfileUpdateRequest request) {
+        Optional<User> user = authUserResolver.resolve(authHeader);
+        if (user.isEmpty()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
-
-        String skills = data.getOrDefault("skills", "").toString();
-        String major = data.getOrDefault("major", "").toString();
-        String degree = data.getOrDefault("degree", "").toString();
-        
-        Double cgpa = null;
-        if (data.get("cgpa") != null && !data.get("cgpa").toString().isEmpty()) {
-            cgpa = Double.valueOf(data.get("cgpa").toString());
-        }
-
-        Integer yop = null;
-        if (data.get("yop") != null && !data.get("yop").toString().isEmpty()) {
-            yop = Integer.valueOf(data.get("yop").toString());
-        }
-
-        Optional<UserPredictionHistory> lastProfileOpt = profileRepo.findFirstByUserOrderByCreatedAtDesc(user);
-        UserPredictionHistory profile;
-
-        if (lastProfileOpt.isPresent()) {
-            profile = lastProfileOpt.get();
-            if (!major.isEmpty()) profile.setMajor(major);
-            if (cgpa != null) profile.setCgpa(cgpa);
-            if (!degree.isEmpty()) profile.setDegree(degree);
-            if (!skills.isEmpty()) profile.setSkills(skills);
-            if (yop != null) profile.setYearOfGraduation(yop);
-        } else {
-            profile = new UserPredictionHistory();
-            profile.setUser(user);
-            profile.setMajor(major);
-            profile.setCgpa(cgpa);
-            profile.setDegree(degree);
-            profile.setSkills(skills);
-            profile.setYearOfGraduation(yop);
-        }
-
-        profileRepo.save(profile);
-        
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Profile updated successfully!");
+        ProfileResponse response = profileService.updateProfile(user.get(), request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/latest")
-    public ResponseEntity<?> getLatestProfile(@RequestHeader("Authorization") String authHeader) {
-        User user = getAuthenticatedUser(authHeader);
-        if (user == null) {
-            return ResponseEntity.status(401).body("Unauthorized");
+    public ResponseEntity<?> getLatestProfile(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        Optional<User> user = authUserResolver.resolve(authHeader);
+        if (user.isEmpty()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
-
-        Optional<UserPredictionHistory> lastProfileOpt = profileRepo.findFirstByUserOrderByCreatedAtDesc(user);
-
-        if (lastProfileOpt.isPresent()) {
-            UserPredictionHistory p = lastProfileOpt.get();
-            Map<String, Object> response = new HashMap<>();
-            response.put("major", p.getMajor());
-            response.put("cgpa", p.getCgpa());
-            response.put("degree", p.getDegree());
-            response.put("skills", p.getSkills() != null && !p.getSkills().isEmpty() ? Arrays.asList(p.getSkills().split(",")) : new java.util.ArrayList<>());
-            response.put("year_of_graduation", p.getYearOfGraduation());
-            return ResponseEntity.ok(response);
-        }
-
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "No profile found.");
-        return ResponseEntity.ok(response);
+        return profileService.getLatestProfile(user.get())
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.ok(Map.of("message", "No profile found.")));
     }
 }

@@ -310,3 +310,45 @@ input[type="text"], input[type="password"], input[type="email"], input[type="num
     transform: translateY(-3px);
     box-shadow: 0 8px 18px rgba(0, 242, 254, 0.25);
 }
+/* ============ EDU2JOB 2.0 additions ============ */
+.sidebar-tagline { color:#a1a1aa; font-size:.8rem; margin:-8px 0 18px 4px; letter-spacing:.04em; }
+.view-title { color:#fff; margin-bottom:4px; }
+.view-subtitle, .empty-state { color:#a1a1aa; line-height:1.55; }
+.empty-state { padding:22px; text-align:center; }
+.profile-form { display:flex; flex-direction:column; gap:20px; max-width:860px; }
+.form-section { border:1px solid #2f2f44; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:8px; background:rgba(42,42,64,.55); }
+.form-section legend { color:#00f2fe; font-weight:700; padding:0 8px; }
+.form-section label { color:#e4e4e7; font-weight:600; margin-top:8px; }
+.form-section input, .form-section select { background:#1c1c2e; border:1px solid #3f3f5a; border-radius:9px; color:#fff; padding:11px 12px; font-size:.95rem; }
+.form-section input:focus, .form-section select:focus { outline:2px solid #00f2fe66; border-color:#00f2fe; }
+.field-hint { color:#8b8b9e; font-size:.8rem; }
+.field-error { color:#fda4af; font-size:.85rem; }
+.prediction-error { color:#fda4af; background:rgba(244,63,94,.12); border:1px solid rgba(244,63,94,.4); padding:12px 14px; border-radius:10px; max-width:860px; }
+.skills-chips { display:flex; flex-wrap:wrap; gap:8px; background:#1c1c2e; border:1px solid #3f3f5a; border-radius:9px; padding:8px; }
+.skills-chips input { flex:1 1 180px; border:none !important; background:transparent !important; padding:6px !important; }
+.skill-chip { background:linear-gradient(90deg,#4facfe,#00f2fe); color:#081018; font-weight:700; border-radius:999px; padding:4px 6px 4px 12px; display:inline-flex; align-items:center; gap:6px; font-size:.85rem; }
+.skill-chip button { background:rgba(0,0,0,.25); color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; line-height:1; padding:0; }
+.skills-suggestions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.suggestion-chip { background:#2a2a40; color:#a5f3fc; border:1px solid #3f3f5a; border-radius:999px; padding:4px 10px; cursor:pointer; font-size:.8rem; }
+.suggestion-chip:hover { border-color:#00f2fe; color:#fff; }
+.results-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-top:16px; }
+.role-card { background:#2a2a40; border:1px solid #3f3f5a; border-radius:14px; padding:18px; color:#e4e4e7; }
+.role-card.top-role { border-color:#00f2fe; box-shadow:0 8px 24px rgba(0,242,254,.18); }
+.role-card h3 { margin:10px 0 8px; color:#fff; }
+.role-card-header { display:flex; justify-content:space-between; align-items:center; }
+.rank-badge { background:linear-gradient(90deg,#4facfe,#00f2fe); color:#081018; font-weight:800; border-radius:8px; padding:3px 9px; }
+.top-match-badge { color:#fde68a; font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+.score-label { color:#a1a1aa; font-size:.82rem; }
+.role-scope { color:#c9c9d4; font-size:.88rem; line-height:1.55; }
+.results-note { color:#8b8b9e; font-size:.8rem; margin-top:14px; line-height:1.5; }
+.model-badge { background:rgba(0,242,254,.15); color:#67e8f9; border:1px solid rgba(0,242,254,.4); padding:2px 8px; border-radius:999px; font-size:.75rem; white-space:nowrap; }
+.legacy-badge { background:rgba(251,191,36,.12); color:#fcd34d; border:1px solid rgba(251,191,36,.35); padding:2px 8px; border-radius:999px; font-size:.75rem; white-space:nowrap; }
+.details-btn { background:#3b3b58; color:#fff; border:none; border-radius:8px; padding:6px 12px; cursor:pointer; }
+.details-btn:hover { background:#4facfe; }
+#profile-form, #predict-form { display:flex; flex-direction:column; gap:14px; max-width:900px; }
+#profile-form > button, #predict-form > button { background:linear-gradient(90deg,#4facfe,#00f2fe); color:#fff; font-weight:700; padding:13px 26px; border:none; border-radius:10px; cursor:pointer; align-self:flex-start; min-width:220px; }
+#profile-form > button:disabled, #predict-form > button:disabled { opacity:.55; cursor:wait; }
+@media (max-width: 768px) {
+  .results-grid { grid-template-columns:1fr; }
+  #profile-form > button, #predict-form > button { width:100%; }
+}

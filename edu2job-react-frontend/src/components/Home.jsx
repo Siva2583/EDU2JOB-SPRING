@@ -1,292 +1,252 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import '@yaireo/tagify/dist/tagify.css';
-import Tagify from '@yaireo/tagify';
+import api, { apiErrorMessage } from '../api';
 import '../App.css';
+import ProfileForm from './ProfileForm';
+import ResultsCards from './ResultsCards';
+import { EMPTY_PROFILE, profileCompletion } from '../constants/profileOptions';
+import { buildPredictionPayload, buildProfilePayload, validateProfile } from '../utils/profileValidation';
 
 function Home() {
   const navigate = useNavigate();
-  const [activeView, setActiveView] = useState('welcome');
-  const [isEditing, setIsEditing] = useState(false);
+  const [activeView, setActiveView] = useState('dashboard');
   const [toastMessage, setToastMessage] = useState('');
+  const [profile, setProfile] = useState(EMPTY_PROFILE);
+  const [profileErrors, setProfileErrors] = useState({});
+  const [profileMessage, setProfileMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   const [predictions, setPredictions] = useState([]);
+  const [modelVersion, setModelVersion] = useState(null);
   const [predictionError, setPredictionError] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
-  const [username, setUsername] = useState('Explorer');
 
-  const [profileData, setProfileData] = useState({
-    username: '', email: '', cgpa: '', degree: '', skills: '', yop: ''
-  });
+  const [history, setHistory] = useState([]);
+  const [historyError, setHistoryError] = useState('');
 
-  const [predictData, setPredictData] = useState({
-    major: '', cgpa: '', degree: '', skills: '', yop: ''
-  });
-
-  const profileSkillsRef = useRef();
-  const predictSkillsRef = useRef();
-  const profileTagify = useRef();
-  const predictTagify = useRef();
-
-  const skillsWhitelist = ["Python","Communication","DataStructures","Algorithms","SQL","Java","C++","JavaScript","HTML","CSS","Git","Linux","Django","React","Matlab","Excel","Accounting","Financial Modeling","Electronics","Microcontrollers","RTOS","SolidWorks","AutoCAD","Lean Manufacturing","Thermodynamics","Mechanics","Materials","CAD","Valuation","M&A"];
-
-  useEffect(() => {
-    if (activeView === 'profile' && profileSkillsRef.current && !profileTagify.current) {
-      profileTagify.current = new Tagify(profileSkillsRef.current, {
-        whitelist: skillsWhitelist,
-        dropdown: { enabled: 1, maxItems: 20, closeOnSelect: true }
-      });
-      profileTagify.current.on('change', (e) => {
-        setProfileData(prev => ({ ...prev, skills: e.detail.value }));
-      });
-      
-      if (profileData.skills) {
-        try {
-          const parsed = JSON.parse(profileData.skills);
-          profileTagify.current.addTags(parsed);
-        } catch {
-          profileTagify.current.addTags(profileData.skills.split(','));
-        }
-      }
-    }
-    
-    if (activeView === 'predict' && predictSkillsRef.current && !predictTagify.current) {
-      predictTagify.current = new Tagify(predictSkillsRef.current, {
-        whitelist: skillsWhitelist,
-        dropdown: { enabled: 1, maxItems: 20, closeOnSelect: true }
-      });
-      predictTagify.current.on('change', (e) => {
-        setPredictData(prev => ({ ...prev, skills: e.detail.value }));
-      });
-    }
-  }, [activeView, profileData.skills]);
-
-  
-useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await api.get('/api/profile/latest');
-        if (res.data && !res.data.message) {
-          setUsername(res.data.username || 'Explorer');
-          setProfileData({
-            username: res.data.username || '',
-            email: res.data.email || '',
-            cgpa: res.data.cgpa || '',
-            degree: res.data.degree || '',
-            skills: res.data.skills ? res.data.skills.join(',') : '',
-            yop: res.data.year_of_graduation || ''
-          });
-          setIsEditing(!res.data.cgpa);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchProfile();
-  }, []);
-
-  const handleProfileSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      let parsedSkills = [];
-      if (profileData.skills) {
-        try { 
-          parsedSkills = JSON.parse(profileData.skills).map(t => t.value); 
-        } catch { 
-          parsedSkills = profileData.skills.split(','); 
-        }
-      }
-      
-      const payload = { ...profileData, skills: parsedSkills.join(',') };
-      await api.post('/api/profile/update', payload);
-      setIsEditing(false);
-      showToast('Profile updated successfully!');
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handlePredictSubmit = async (e) => {
-    e.preventDefault();
-    setIsPredicting(true);
-    setPredictions([]);
-    setPredictionError('');
-
-    try {
-      let parsedSkills = [];
-      if (predictData.skills) {
-        try { 
-          parsedSkills = JSON.parse(predictData.skills).map(t => t.value); 
-        } catch { 
-          parsedSkills = predictData.skills.split(','); 
-        }
-      }
-
-      const payload = { ...predictData, skills: parsedSkills.join(',') };
-      const res = await api.post('/api/predict/', payload);
-      
-      if (res.data.predictions && res.data.predictions.length > 0) {
-        setPredictions(res.data.predictions);
-      } else {
-        setPredictionError(res.data.error || "Could not retrieve prediction.");
-      }
-    } catch (err) {
-      setPredictionError("An error occurred.");
-    } finally {
-      setIsPredicting(false);
-    }
-  };
   const showToast = (message) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(''), 3000);
   };
 
+  const applyServerProfile = useCallback((data) => {
+    setProfile({
+      degree: data.degree || '',
+      major: data.major || '',
+      cgpa: data.cgpa ?? '',
+      skills: Array.isArray(data.skills) ? data.skills : [],
+      certification_name: data.certification_name || '',
+      internship_experience: data.internship_experience || '',
+      projects_count: data.projects_count ?? '',
+      communication_skill: data.communication_skill || '',
+      experience_months: data.experience_months ?? '',
+    });
+  }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/profile/latest');
+        if (res.data && !res.data.message) applyServerProfile(res.data);
+      } catch (err) { /* profile may simply not exist yet */ }
+      try {
+        const res = await api.get('/api/predict/history');
+        setHistory(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        setHistoryError(apiErrorMessage(err, 'Could not load your history.'));
+      }
+    })();
+  }, [applyServerProfile]);
 
+  const handleProfileSubmit = async (e) => {
+    e.preventDefault();
+    const errors = validateProfile(profile);
+    setProfileErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setIsSaving(true);
+    setProfileMessage('');
+    try {
+      const res = await api.post('/api/profile/update', buildProfilePayload(profile));
+      if (res.data && !res.data.message) applyServerProfile(res.data);
+      showToast('Profile updated successfully!');
+    } catch (err) {
+      setProfileMessage(apiErrorMessage(err, 'Could not save your profile.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
+  const handlePredictSubmit = async (e) => {
+    e.preventDefault();
+    const errors = validateProfile(profile, { requireAll: true });
+    setProfileErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setPredictionError('Your profile is incomplete — please fill in every field so the model gets all nine inputs.');
+      return;
+    }
+    setIsPredicting(true);
+    setPredictions([]);
+    setPredictionError('');
+    try {
+      const res = await api.post('/api/predict/', buildPredictionPayload(profile));
+      if (res.data.predictions && res.data.predictions.length > 0) {
+        setPredictions(res.data.predictions);
+        setModelVersion(res.data.modelVersion || 'edu2job-v2');
+        const hist = await api.get('/api/predict/history').catch(() => null);
+        if (hist) setHistory(Array.isArray(hist.data) ? hist.data : []);
+      } else {
+        setPredictionError('No recommendations came back. Please try again.');
+      }
+    } catch (err) {
+      setPredictionError(apiErrorMessage(err, 'Prediction failed. Please try again.'));
+    } finally {
+      setIsPredicting(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('jwt_token');
+    navigate('/login');
+  };
+
+  const completed = profileCompletion(profile);
+  const latest = history.length > 0 ? history[0] : null;
+  const latestRoles = latest && Array.isArray(latest.predictions) ? latest.predictions : [];
 
   return (
     <>
-      <div id="stars1"></div>
-      <div id="stars2"></div>
-      <div id="stars3"></div>
-
+      <div className="stars"></div>
       <div className="sidebar">
-        <h1>Welcome Back!</h1>
-        <button className={`profile-info ${activeView === 'profile' ? 'active' : ''}`} onClick={() => setActiveView('profile')}>
+        <h1>EDU2JOB 2.0</h1>
+        <p className="sidebar-tagline">Discover Your Career Fit</p>
+        <button className={activeView === 'dashboard' ? 'active' : ''} onClick={() => setActiveView('dashboard')}>
+          <i className="fa-solid fa-house"></i> Dashboard
+        </button>
+        <button className={activeView === 'profile' ? 'active' : ''} onClick={() => setActiveView('profile')}>
           <i className="fa-solid fa-user-gear"></i> Profile Info
         </button>
-        <button className={`predict ${activeView === 'predict' ? 'active' : ''}`} onClick={() => setActiveView('predict')}>
+        <button className={activeView === 'predict' ? 'active' : ''} onClick={() => setActiveView('predict')}>
           <i className="fa-solid fa-brain"></i> Predict
         </button>
         <button className="archive" onClick={() => navigate('/archive')}>
           <i className="fa-solid fa-box-archive"></i> View Archive
         </button>
+        <button onClick={handleLogout} style={{ marginTop: 'auto', marginBottom: '30px' }}>
+          <i className="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
       </div>
 
       <main className="main-content">
-        {activeView === 'welcome' && (
+        {activeView === 'dashboard' && (
           <div id="welcome-screen">
-            <h1 className="welcome-title">Hello, {username}!</h1>
-            <p className="welcome-subtitle">What would you like to do today?</p>
+            <h1 className="welcome-title">Discover Your Career Fit 🎓</h1>
+            <p className="welcome-subtitle">
+              EDU2JOB 2.0 matches your degree, skills and experience to the
+              job roles that fit you best — technical or non-technical.
+            </p>
+
+            <div className="kpi-container">
+              <div className="kpi-card">
+                <i className="fa-solid fa-user-check kpi-icon"></i>
+                <div className="kpi-details">
+                  <h3>Profile completion</h3>
+                  <p>{completed}/9 fields</p>
+                </div>
+              </div>
+              <div className="kpi-card">
+                <i className="fa-solid fa-database kpi-icon"></i>
+                <div className="kpi-details">
+                  <h3>Predictions made</h3>
+                  <p>{history.length}</p>
+                </div>
+              </div>
+              <div className="kpi-card">
+                <i className="fa-solid fa-crosshairs kpi-icon"></i>
+                <div className="kpi-details">
+                  <h3>Latest top role</h3>
+                  <p style={{ fontSize: '1.1rem', marginTop: '10px' }}>
+                    {latestRoles.length > 0 ? latestRoles[0].role : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="quick-actions-container">
               <div className="quick-action-card" onClick={() => setActiveView('profile')}>
                 <i className="fa-solid fa-address-card"></i>
-                <h3>Update Profile</h3>
-                <p>Keep your details current for the best predictions.</p>
+                <h3>{completed === 9 ? 'Update Profile' : 'Complete Your Profile'}</h3>
+                <p>{completed === 9
+                  ? 'Keep your details current for the best predictions.'
+                  : `You have filled ${completed} of 9 fields. Complete your profile to unlock predictions.`}</p>
               </div>
               <div className="quick-action-card" onClick={() => setActiveView('predict')}>
                 <i className="fa-solid fa-wand-magic-sparkles"></i>
-                <h3>Get Prediction</h3>
-                <p>Discover your potential career paths right now.</p>
+                <h3>Get Career Recommendations</h3>
+                <p>See your top 5 job roles, ranked for your profile.</p>
               </div>
             </div>
+
+            {historyError && <p className="field-error">{historyError}</p>}
+            {latestRoles.length > 0 && (
+              <section className="bento-box" style={{ marginTop: '24px' }}>
+                <h3>Your most recent recommendations</h3>
+                <ResultsCards predictions={latestRoles.slice(0, 5)}
+                  modelVersion={latest.modelVersion || undefined} />
+                {!latest.modelVersion && (
+                  <p className="results-note">These came from the previous model version and are kept for your records.</p>
+                )}
+              </section>
+            )}
+            {history.length === 0 && !historyError && (
+              <p className="empty-state">
+                No predictions yet. Complete your profile, then run your first
+                career prediction to see recommendations here.
+              </p>
+            )}
           </div>
         )}
 
         {activeView === 'profile' && (
-          <form id="profile-form" style={{ display: 'flex' }} onSubmit={handleProfileSubmit}>
-            <label htmlFor="username">Username</label>
-            <input type="text" id="username" value={profileData.username} readOnly />
-            
-            <label htmlFor="email">Email</label>
-            <input type="email" id="email" value={profileData.email} readOnly />
-            
-            <label htmlFor="profile-cgpa">CGPA</label>
-            <input type="number" id="profile-cgpa" value={profileData.cgpa} disabled={!isEditing} onChange={(e) => setProfileData({...profileData, cgpa: e.target.value})} />
-            
-            <label htmlFor="profile-degree">Degree</label>
-            <input type="text" id="profile-degree" value={profileData.degree} disabled={!isEditing} onChange={(e) => setProfileData({...profileData, degree: e.target.value})} />
-            
-            <label htmlFor="profile-skills">Skills</label>
-            <input ref={profileSkillsRef} id="profile-skills" placeholder="Type or select skills..." disabled={!isEditing} />
-            
-            <label htmlFor="profile-yearofpass">Year of Graduation:</label>
-            <input type="number" id="profile-yearofpass" value={profileData.yop} disabled={!isEditing} onChange={(e) => setProfileData({...profileData, yop: e.target.value})} />
-            
-            {isEditing ? (
-              <button type="submit" id="submitProfile">Submit</button>
-            ) : (
-              <button type="button" id="editProfile" onClick={() => setIsEditing(true)} style={{ display: 'inline-block' }}>Edit</button>
-            )}
+          <form id="profile-form" onSubmit={handleProfileSubmit}>
+            <h2 className="view-title">Your Profile</h2>
+            <p className="view-subtitle">
+              This is exactly what the recommendation model sees — all nine
+              fields, nothing more, nothing hidden.
+            </p>
+            <ProfileForm profile={profile} onChange={setProfile}
+              errors={profileErrors} disabled={isSaving} />
+            {profileMessage && <p className="field-error">{profileMessage}</p>}
+            <button type="submit" id="submitProfile" disabled={isSaving}>
+              {isSaving ? 'Saving…' : 'Save Profile'}
+            </button>
           </form>
         )}
 
         {activeView === 'predict' && (
-          <>
-            <form id="predict-form" style={{ display: predictions.length || isPredicting || predictionError ? 'none' : 'flex' }} onSubmit={handlePredictSubmit}>
-              <label htmlFor="major">Major:</label>
-              <input id="major" list="majors" placeholder="Select your major" value={predictData.major} onChange={(e) => setPredictData({...predictData, major: e.target.value})} />
-              <datalist id="majors">
-                <option value="Civil" />
-                <option value="Mechanical" />
-                <option value="Business" />
-                <option value="Computer Science" />
-                <option value="Finance" />
-                <option value="Electronics" />
-              </datalist>
-
-              <label htmlFor="predict-cgpa">CGPA</label>
-              <input type="number" id="predict-cgpa" value={predictData.cgpa} onChange={(e) => setPredictData({...predictData, cgpa: e.target.value})} />
-
-              <label htmlFor="predict-degree">Degree:</label>
-              <input id="predict-degree" list="degrees" placeholder="Select your degree" value={predictData.degree} onChange={(e) => setPredictData({...predictData, degree: e.target.value})} />
-              <datalist id="degrees">
-                <option value="MBA" />
-                <option value="M.Sc" />
-                <option value="B.Tech" />
-                <option value="M.Tech" />
-                <option value="B.Sc" />
-              </datalist>
-
-              <label htmlFor="predict-skills">Skills</label>
-              <input ref={predictSkillsRef} id="predict-skills" placeholder="Type or select skills..." />
-
-              <label htmlFor="predict-yearofpass">Year of Graduation:</label>
-              <input type="number" id="predict-yearofpass" value={predictData.yop} onChange={(e) => setPredictData({...predictData, yop: e.target.value})} />
-
-              <button type="submit" id="predictSubmit">Predict</button>
+          <div>
+            <h2 className="view-title">Career Prediction</h2>
+            <p className="view-subtitle">
+              Predictions run on your profile below. Edit anything, then run —
+              the same nine fields are sent to the model.
+            </p>
+            <form id="predict-form" onSubmit={handlePredictSubmit}>
+              <ProfileForm profile={profile} onChange={setProfile}
+                errors={profileErrors} disabled={isPredicting} />
+              <button type="submit" id="predictSubmit" disabled={isPredicting}>
+                {isPredicting ? '🧠 Analyzing your profile…' : 'Get My Top 5 Roles'}
+              </button>
             </form>
 
-            {(isPredicting || predictions.length > 0 || predictionError) && (
-              <div id="predictionResultContainer" style={{ display: 'block' }}>
-                <h2>✨ Your Predicted Career Paths</h2>
-                <table id="predictionResultTable">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '30%' }}>Role</th>
-                      <th style={{ width: '25%' }}>Confidence</th>
-                      <th>Justification & Scope</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isPredicting && (
-                      <tr><td colSpan="3" style={{ textAlign: 'center' }}>🧠 Analyzing your profile...</td></tr>
-                    )}
-                    {predictionError && !isPredicting && (
-                      <tr><td colSpan="3" style={{ textAlign: 'center' }}>{predictionError}</td></tr>
-                    )}
-                    {!isPredicting && predictions.map((pred, idx) => (
-                      <tr key={idx} className="fade-in-row">
-                        <td><strong>{pred.role}</strong></td>
-                        <td>
-                          <div className="confidence-bar">
-                            <div className="confidence-bar-inner" style={{ width: `${pred.score}%`, backgroundColor: parseFloat(pred.score) > 75 ? '#28a745' : parseFloat(pred.score) > 50 ? '#ffc107' : '#dc3545' }}>
-                              {pred.score}%
-                            </div>
-                          </div>
-                        </td>
-                        <td>{pred.scope}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!isPredicting && (
-                   <button onClick={() => { setPredictions([]); setPredictionError(''); }} style={{ marginTop: '20px' }}>New Prediction</button>
-                )}
-              </div>
+            {predictionError && !isPredicting && (
+              <p className="prediction-error" role="alert">{predictionError}</p>
             )}
-          </>
+            {predictions.length > 0 && (
+              <section id="predictionResultContainer">
+                <h2>✨ Your Predicted Career Paths</h2>
+                <ResultsCards predictions={predictions} modelVersion={modelVersion} />
+              </section>
+            )}
+          </div>
         )}
 
         <div id="toast-container">

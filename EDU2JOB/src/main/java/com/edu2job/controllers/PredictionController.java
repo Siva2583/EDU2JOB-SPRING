@@ -1,77 +1,63 @@
 package com.edu2job.controllers;
-import com.edu2job.models.PredHistory;
+
+import com.edu2job.dto.PredictionRequest;
 import com.edu2job.models.User;
-import com.edu2job.repositories.PredHistoryRepository;
-import com.edu2job.repositories.UserRepository;
-import com.edu2job.security.JwtUtil;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
-import java.util.List;
+import com.edu2job.security.AuthUserResolver;
+import com.edu2job.service.MlServiceException;
+import com.edu2job.service.PredictionService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Prediction endpoints (routes unchanged):
+ * {@code POST /api/predict/} runs a nine-field prediction through the Flask
+ * ML service and archives it; {@code GET /api/predict/history} returns the
+ * authenticated user's history (old-model rows included, marked by a null
+ * model version).
+ */
 @RestController
 @RequestMapping("/api/predict")
 public class PredictionController {
-    @Autowired
-    private PredHistoryRepository predHistoryRepo;
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private JwtUtil jwtUtil;
-    private User getAuthenticatedUser(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authHeader.substring(7);
-        String username = jwtUtil.extractUsername(token);
-        return userRepository.findByUsername(username).orElse(null);
+
+    private final PredictionService predictionService;
+    private final AuthUserResolver authUserResolver;
+
+    public PredictionController(PredictionService predictionService, AuthUserResolver authUserResolver) {
+        this.predictionService = predictionService;
+        this.authUserResolver = authUserResolver;
     }
+
     @PostMapping("/")
-    public ResponseEntity<?> makePrediction(@RequestHeader("Authorization") String authHeader, @RequestBody Map<String, Object> data) {
-        User user = getAuthenticatedUser(authHeader);
-        if (user == null) {
-            return ResponseEntity.status(401).body("Unauthorized");
+    public ResponseEntity<?> makePrediction(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody PredictionRequest request) {
+        Optional<User> user = authUserResolver.resolve(authHeader);
+        if (user.isEmpty()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
-
-        RestTemplate restTemplate = new RestTemplate();
-        String flaskUrl = "http://localhost:5000/predict";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(data, headers);
-
         try {
-            ResponseEntity<String> flaskResponse = restTemplate.postForEntity(flaskUrl, entity, String.class);
-            PredHistory history = new PredHistory();
-            history.setUser(user);
-            history.setMajor(data.getOrDefault("major", "").toString());
-            if (data.get("cgpa") != null && !data.get("cgpa").toString().isEmpty()) {
-                history.setCgpa(Double.valueOf(data.get("cgpa").toString()));
-            }
-            history.setDegree(data.getOrDefault("degree", "").toString());
-            history.setSkills(data.getOrDefault("skills", "").toString());
-            
-            if (data.get("yop") != null && !data.get("yop").toString().isEmpty()) {
-                history.setYearOfGraduation(Integer.valueOf(data.get("yop").toString()));
-            }
-
-            history.setPredictedOutput(flaskResponse.getBody());
-            predHistoryRepo.save(history);
-
-            return ResponseEntity.ok(flaskResponse.getBody());
-
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.ok(predictionService.predict(user.get(), request));
+        } catch (MlServiceException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("message", e.getMessage()));
         }
     }
+
     @GetMapping("/history")
-    public ResponseEntity<?> getHistory(@RequestHeader("Authorization") String authHeader) {
-        User user = getAuthenticatedUser(authHeader);
-        if (user == null) {
-            return ResponseEntity.status(401).body("Unauthorized");
+    public ResponseEntity<?> getHistory(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        Optional<User> user = authUserResolver.resolve(authHeader);
+        if (user.isEmpty()) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
-        List<PredHistory> history = predHistoryRepo.findByUserOrderByCreatedAtDesc(user);
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(predictionService.getHistory(user.get()));
     }
 }
